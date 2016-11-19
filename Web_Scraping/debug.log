@@ -1,0 +1,4 @@
+[1105/202825:ERROR:process_info.cc(372)] NtQuerySystemInformation SystemExtendedHandleInformation: The specified information record length does not match the length required for the specified information class.  (0xc0000004)
+[1105/204548:ERROR:process_info.cc(372)] NtQuerySystemInformation SystemExtendedHandleInformation: The specified information record length does not match the length required for the specified information class.  (0xc0000004)
+[1106/080900:ERROR:process_info.cc(372)] NtQuerySystemInformation SystemExtendedHandleInformation: The specified information record length does not match the length required for the specified information class.  (0xc0000004)
+[1106/110510:ERROR:process_info.cc(372)] NtQuerySystemInformation SystemExtendedHandleInformation: The specified information record length does not match the length required for the specified information class.  (0xc0000004)

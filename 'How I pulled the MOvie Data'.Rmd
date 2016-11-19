@@ -1,0 +1,486 @@
+---
+title: "How I pulled the movie data"
+author: "Brent Halen"
+date: "September 25, 2016"
+output: word_document
+---
+
+Before you utilize the code in this R Markdown document, I would highly recommend you obtain the Box Office Mojo data. I provided a script that would do the job, strictly for educational purposes, in the form of a jupyter notebook. To read it, download and install Anaconda (specifically, the Python 2.7 version) here: https://www.continuum.io/downloads
+
+Once that's done, you will also need to obtain the following datasets: 
+Movielens latest: http://grouplens.org/datasets/movielens/ (The link is labeled 'ml-latest.zip')
+IMDB 5000 Movie Dataset: https://www.kaggle.com/deepmatrix/imdb-5000-movie-dataset
+
+Next, we need to load a few R packages. If you don't have these packages installed already, install them using the 'install.packages()' command. You'll need to pass the package name as a character variable by enclosing it in ' marks. Here's an example: 
+
+```{r}
+#install.packages('ggplot2')
+library(ggplot2)
+```
+
+Here's the rest of the packages. 
+
+```{r}
+library(dplyr)
+library(RJSONIO)
+library(zoo)
+library(TTR)
+```
+
+Now, the next goal is to grab whatever data we can from the Open Movie Database for the movies listed in our Movielens dataset. The following function should return a frame of the available OMDB data when we pass the movielens set to it. 
+
+
+```{r}
+
+GetOMDBdata <- function(x){
+    OMDBurl1 <- "http://www.omdbapi.com/?i=tt"
+    OMDBurl2 <- "&plot=short&r=json&tomatoes=true"
+    IMDBid <- toString(x[1,2])
+    while(nchar(IMDBid)<7){
+        IMDBid <- paste("0",IMDBid,sep="")
+    }
+    finalomdbURL <- paste(OMDBurl1,IMDBid,OMDBurl2, sep = "")
+    pull <- fromJSON(finalomdbURL,nullValue=NA)
+    dataframe <- as.data.frame(t(pull),stringsAsFactors = FALSE)
+    returnframe <- dataframe
+    pausecounter <- 1
+    for(i in 2:nrow(x)){
+        IMDBid <- toString(x[i,2])
+        while(nchar(IMDBid)<7){
+            IMDBid <- paste("0",IMDBid,sep="")
+        }
+        finalomdbURL <- paste(OMDBurl1,IMDBid,OMDBurl2, sep = "")
+        pull <- fromJSON(finalomdbURL,nullValue=NA)
+        dataframe <- as.data.frame(t(pull),stringsAsFactors=FALSE)
+        returnframe <- bind_rows(returnframe,dataframe)
+        #print(str(returnframe))
+        pausecounter <- pausecounter + 1
+        if(pausecounter >= 1500){
+            print("pausing")
+            Sys.sleep(15)
+            pausecounter <- 1
+        }
+        print(paste("step ",nrow(returnframe)))
+        print(paste(((i/nrow(x))*100),"% completed."))
+    }
+    return(returnframe)
+}
+
+
+```
+
+
+But before we run the function, we have to load the datasets. Examine your current working directory with the 'getwd()' and 'list.files()' commands. If the required data isn't already in your working directory, fix this with the 'setwd()' command. 
+
+If you're using windows, be aware of the fact that R utilizes a slightly different system for writing directories. You won't be able to just copy the directory from windows explorer's address bar and paste it into the function. You'll have to change each '\' to a '/' before it'll work. I've collected all the files that I didn't build from scraping or an API in a folder called 'Base Datasets'. 
+
+
+
+```{r}
+#setwd("/media/virgil/SAMSUNG/Github/Data_Visualization_Project_Fall2016/Base Datasets")
+setwd('G:/Github/Data_Visualization_Project_Fall2016/Base Datasets')
+list.files()
+```
+
+We should be able to see the following files: links, movie metadata, movies, ratings, and tags. The links, movies, ratings, and tags files are from the Movielens dataset. These will not be hosted on the Github because they're simply too large (over 100MB, which is the limit Github sets for file sizes). The movie metadata file is from the IMDB 5000 dataset. We will load them into R using the following commands: 
+
+```{r}
+links <- read.csv(file="links.csv", header=TRUE, stringsAsFactors = FALSE)
+movie_metadata <- read.csv(file="links.csv",header=TRUE,stringsAsFactors=FALSE)
+movies <- read.csv(file="movies.csv",header=TRUE,stringsAsFactors = FALSE)
+ratings <- read.csv(file="ratings.csv",header=TRUE,stringsAsFactors = FALSE)
+tags <- read.csv(file="tags.csv",header=TRUE, stringsAsFactors = FALSE)
+```
+
+After that, we will also need to grab our box office mojo data. I've stored this in a different folder (also not kept on the repository). Keep in mind where you've saved the file after you run the jupyter notebook file I alluded to earlier. 
+
+```{r}
+setwd('G:/Github/Data_Visualization_Project_Fall2016/Constructed Datasets')
+#setwd('/media/virgil/SAMSUNG/Github/Data_Visualization_Project_Fall2016/Constructed Datasets')
+moviedump <- read.csv(file="moviedump.csv", header=TRUE, stringsAsFactors = FALSE)
+usr_rating_data <- read.csv(file="usr_rating_data.csv",header=TRUE,stringsAsFactors = FALSE)
+merged_data <- read.csv(file="merged_data.csv",header=TRUE,stringsAsFactors = FALSE)
+combined_table <- read.csv(file="Combined Table.csv",header=TRUE,stringsAsFactors = FALSE)
+Tomato <- read.csv(file="Tomato.csv",header=TRUE,stringsAsFactors = FALSE)
+Tomatometer <- read.csv(file="Tomatometer.csv",header=TRUE,stringsAsFactors = FALSE)
+Bigset <- read.csv(file="Bigset.csv",header=TRUE,stringsAsFactors=FALSE)
+OMDBdata2 <- read.csv(file="OMDBdata2.csv",header=TRUE, stringsAsFactors = FALSE)
+str(moviedump)
+
+# The following code reformats the budget info from Box Office Mojo's format of "$## Million/Thousand" to 
+# a more conventional numeric format. This is needed if your scrape is fresh. 
+# 
+# moviedump$budget <- gsub('*\\$?','',moviedump$budget)
+# 
+# new <- ifelse(gsub('.*\\s+','',moviedump$budget) == 'million',
+#               as.numeric(gsub('[A-Za-z]','',moviedump$budget))*1000000,moviedump$budget)
+# 
+# new
+# new2 <- ifelse(gsub('.*\\s+','',new) == 'thousand',
+#               as.numeric(gsub('[A-Za-z]','',new))*1000,new)
+# 
+# new2
+# new3 <- gsub(',','',new2)
+# 
+# new3[new3=="N/A"] <- NA
+# 
+# new4 <- as.numeric(new3)
+# moviedump$budget <- new4
+
+# The following code loads the IMDB 5000 movie dataset (assuming it's been unzipped 
+# to a folder named 'imdb-5000-movie-dataset') and adjusts the gross/budget data
+# for inflation. 
+setwd('G:/Github/Data_Visualization_Project_Fall2016/imdb-5000-movie-dataset')
+CPI_table <- read.csv("CPI.csv",header = TRUE,stringsAsFactors=FALSE)
+CPI_table$Year <- as.numeric(CPI_table$Year)
+CPI_table$CPI <- as.numeric(CPI_table$CPI)
+imdb_data <- read.csv("movie_metadata.csv",header = TRUE,stringsAsFactors = FALSE)
+imdb_data$adjusted_gross <- ""
+imdb_data$adjusted_budget <- ""
+
+for (i in 1:nrow(imdb_data)){
+    # Sets the adjusted budget & gross data to 'NA' if any of the required data is missing.
+    if(is.na(imdb_data[i,24])|is.na(imdb_data[i,9])|is.na(imdb_data[i,23]))
+        {
+        
+        imdb_data[i,29] <- NA
+        imdb_data[i,30] <- NA
+    } else {
+        # Adjusts the gross & budget data by CPI and adds it to the newly set "adjusted_gross" and "adjusted_budget" columns.
+        title_year <- as.numeric(imdb_data[i,24])
+        CPI <- as.numeric(CPI_table[(CPI_table$Year==title_year),2])
+        CPI_adjusted <- CPI*(1/100)
+        gross <- as.numeric(imdb_data[i,9])
+        adjusted_gross <- gross/CPI_adjusted
+        budget <- as.numeric(imdb_data[i,23])
+        adjusted_budget <- budget/CPI_adjusted
+        imdb_data[i,29] <- as.numeric(adjusted_gross)
+        imdb_data[i,30] <- as.numeric(adjusted_budget)
+    }
+    # The following is for debugging purposes only.    
+    # print(i)
+}
+setwd('G:/Github/Data_Visualization_Project_Fall2016')
+#setwd('/media/virgil/SAMSUNG/Github/Data_Visualization_Project_Fall2016/')
+```
+
+```{r}
+library(e1071)
+library(dplyr)
+library(caret)
+library(tidyr)
+
+ratings1 <- ratings %>% drop_na(rating)
+ratings1 <- ratings1[order(ratings1[,2]),]
+ratingsId <- ratings1$movieId
+
+linkssub <- subset(links, movieId %in% ratingsId)
+linkssub <- linkssub[order(linkssub[,1]),]
+sum((linkssub$movieId == unique(ratings1$movieId))==FALSE)
+
+
+get_rating_data <- function(X,Y){
+  Z <- Y
+  finishline <- nrow(Z)
+  ZZ <- X
+  returntable <- data.frame()
+  while(nrow(Z) > 0){
+    completionrate <- ((finishline-nrow(Z))/finishline)*100.0
+    output <- paste("Currently at ",completionrate,"% completion...",sep="")
+    print(output)
+    
+    #print("step1")
+    container1 <- data.frame()
+    #print("step2")
+    container2 <- data.frame()
+    #print("step3")
+    tracker1 <- 0
+      
+    tracker2 <- 0
+    #print("cycling")
+    processingID <- Z[1,2]
+    container1 <- subset(Z, movieId == processingID)
+    
+    
+    
+    print("Processing.")
+    container1[,3] <- as.numeric(container1[,3])
+    container1[,3] <- (((container1[,3])-0.5)*(200/9))
+    print("Processing Ids.")
+    container2 <- data.frame("movieId" = container1[1,2])
+    container2$imdbId <- ZZ[1,2]
+    container2$tmdbId <- ZZ[1,3]
+    print("Processing Stats")
+    Fresh_usr_scores <- container1[container1[,3]>=3.0,3]
+    usr_tomatoscore <- sum(Fresh_usr_scores)/nrow(container1)
+    container2$Usr_tomatometer_equivalent <- usr_tomatoscore
+    print(container2$Usr_tomatometer_equivalent)
+    container2$usrMean <- mean(container1[,3])
+    container2$usrMed <- median(container1[,3])
+    # container2$usrMode <- mode(container1[,3])
+    container2$usrVar <- var(container1[,3])
+    container2$usrStdDev <- sqrt(var(container1[,3]))
+    print("Processing Quantiles")
+    quantiles <- quantile(container1[,3],na.rm=TRUE)
+    print(quantiles)
+    print(paste("The frame has ",nrow(container1),sep=""))
+    container2$usrMin <- quantiles[[1]]
+    print(container2$userMin)
+    container2$usr25percentile <- quantiles[[2]]
+    print(container2$usr25percentile)
+    container2$usr75percentile <- quantiles[[4]]
+    print(container2$usr75percentile)
+    print("Processing range and skew.")
+    container2$usrmax <- quantiles[[5]]
+    container2$usrintquartrange <- (container2$usr75percentile - container2$usr25percentile)
+    container2$usrRange <- (container2$usrmax - container2$usrMin)
+    container2$usrskew <- skewness(container1[,3])
+
+    returntable <- rbind(returntable,container2)
+    print("Processing complete. Adding to table and proceeding...")
+    removal_index <- nrow(container1)
+    print("Removing processed values from Z table.")
+    Z <- Z[-c(1:removal_index),]
+    ZZ <- ZZ[-1,]
+  }
+  return(returntable)
+}
+
+#quantiletest <- quantile(ratings1$rating)
+
+
+usr_rating_data <- get_rating_data(linkssub,ratings1)
+
+setwd("Constructed Datasets")
+write.csv(usr_rating_data,"usr_rating_data.csv",row.names=FALSE)
+setwd("..")
+
+
+ usr_rating_data$IMDBID <- usr_rating_data$imdbId
+
+ format_imdbId <- function(X){
+   for(i in 1:nrow(X)){
+         IMDBid <- toString(X[i,2])
+         while(nchar(IMDBid)<7){
+             IMDBid <- paste("0",IMDBid,sep="")
+         }
+         finalIMDBid <- paste("tt",IMDBid, sep = "")
+         X[i,2] <- finalIMDBid
+   }
+   X[,2] <- as.factor(X[,2])
+   return(X)
+ }
+
+ usr_rating_data_imdbFormat <- format_imdbId(usr_rating_data)
+
+
+ usr_rating_data <- usr_rating_data_imdbFormat
+ colnames(usr_rating_data)[2] <- "imdbID"
+ setwd("Constructed Datasets")
+ write.csv(usr_rating_data_imdbFormat,"usr_rating_data.csv",row.names=FALSE)
+ setwd("..")
+
+usr_rating_data$imdbId <- usr_rating_data$IMDBID
+
+ convert_imdbID <- function(X){
+   for(i in 1:nrow(X)){
+     percentcomplete <- i/nrow(X)*100.0
+     output <- paste("Currently at ",percentcomplete,"% completion.")
+     print(output)
+     imdb <- X[i,19]
+     imdb1 <- substr(imdb,3,nchar(imdb))
+     imdb2 <- as.numeric(imdb1)
+     X[i,19] <- imdb2
+   }
+   return(X)
+ }
+ OMDBdata3 <- convert_imdbID(OMDBdata2)
+
+OMDBdata3[,19] <- as.integer(OMDBdata3[,19])
+OMDBdata3 <- OMDBdata3[order(OMDBdata3[,19]),]
+colnames(OMDBdata3)[19] <- "imdbId"
+usr_rating_data <- usr_rating_data[order(usr_rating_data[,2]),]
+merged_data <- merge(OMDBdata3,usr_rating_data,by="imdbId")
+merged_data$X <- NULL
+setwd("Constructed Datasets")
+write.csv(merged_data,"merged_data.csv",row.names=FALSE)
+setwd("..")
+
+
+moviedump1 <- moviedump
+for(i in 1:nrow(moviedump)){
+    title <- moviedump[i,1]
+    title1 <- gsub("<br/>", " ", title)
+    moviedump[i,1] <- title1
+    print(paste("Now at ",(i/nrow(moviedump)*100),"% completion.", sep=""))
+}
+
+moviedump1$title <- as.character(moviedump$title)
+moviedump1 <- moviedump1[order(moviedump$title),]
+merged_data <- merged_data[order(merged_data$Title),]
+
+
+joinbytitle <- function(X,Z){
+  Y <- Z
+  titlesfound <- 0
+  returntable <- data.frame()
+  finalstop <- 0
+  while(finalstop==0){
+    for(i in 1:nrow(X)){
+      if(nrow(Y)==0){
+      finalstop <- 1
+      }
+      percentcomplete <- i/nrow(X)*100
+      perccomp <- paste(percentcomplete,"% complete.",sep="")
+      Xtitle <- toString(X[i,2])
+      output <- paste('On X row #', i,'.',sep="")
+      print(output)
+      print(perccomp)
+      #print(Xtitle)
+      stopper <- 0
+      while(stopper == 0){
+        for(x in 1:nrow(Y)){
+            # output <- paste('On Y row #', x,'. Scanning...',sep="")
+            # print(output)
+            
+            Ytitle <- toString(Y[x,1])
+            if(Xtitle == Ytitle){
+              loopframe <- cbind(as.data.frame(X[i,]),as.data.frame(Y[x,]))
+              Y <- Y[-x,]
+              #print(loopframe)
+              print("Title found!")
+              titlesfound <- titlesfound + 1
+              titles <- paste("We've located ",titlesfound," so far.",sep="")
+              print(titles)
+              returntable <- rbind(returntable,loopframe)
+              stopper <- 1
+              
+            }
+        }
+        stopper <- 1
+        
+      }
+      
+    output2 <- paste("Returntable has ",nrow(returntable),"rows.",sep="")
+    print(output2)
+    if(i == nrow(X)){
+      finalstop <- 1
+    }
+    }
+  }
+  returntable[,1] <- NULL
+  return(returntable)
+}
+combinedtable<- joinbytitle(merged_data,moviedump1)
+
+setwd("Constructed Datasets")
+write.csv(combinedtable,"Combined Table2.csv",row.names=FALSE)
+write.csv(moviedump1,"moviedump2.csv",row.names=FALSE)
+setwd("..")
+
+```
+
+
+Now that we've obtained our movie data from box office mojo and our rating data, we need to join it with the rest of our dataset. However, the movie titles may not completely match up between our two sets (OMDB might have some movies that BOM doesn't, and vice versa). So, let's make a new dataset with the matching entries from both. 
+
+```{r}
+setwd("Constructed Datasets")
+Bigset <- read.csv("Bigset.csv",header=TRUE)
+moviedump <- read.csv("moviedump.csv",header=TRUE)
+OMDBdata2 <- read.csv("OMDBdata2.csv",header=TRUE)
+Tomatometer <- read.csv("Tomatometer.csv",header = TRUE)
+Tomato <- read.csv("Tomato.csv",header = TRUE)
+setwd("..")
+
+moviedump$title <- as.character(moviedump$title)
+moviedump <- moviedump[order(moviedump$title),]
+merged_data <- merged_data[order(merged_data$Title),]
+
+
+joinbytitle <- function(X,Z){
+  Y <- Z
+  titlesfound <- 0
+  returntable <- data.frame()
+  finalstop <- 0
+  while(finalstop==0){
+    for(i in 1:nrow(X)){
+      if(nrow(Y)==0){
+      finalstop <- 1
+      }
+      percentcomplete <- i/nrow(X)*100
+      perccomp <- paste(percentcomplete,"% complete.",sep="")
+      Xtitle <- toString(X[i,2])
+      output <- paste('On X row #', i,'.',sep="")
+      print(output)
+      print(perccomp)
+      #print(Xtitle)
+      stopper <- 0
+      while(stopper == 0){
+        for(x in 1:nrow(Y)){
+            # output <- paste('On Y row #', x,'. Scanning...',sep="")
+            # print(output)
+            
+            Ytitle <- toString(Y[x,1])
+            if(Xtitle == Ytitle){
+              loopframe <- cbind(as.data.frame(X[i,]),as.data.frame(Y[x,]))
+              Y <- Y[-x,]
+              #print(loopframe)
+              print("Title found!")
+              titlesfound <- titlesfound + 1
+              titles <- paste("We've located ",titlesfound," so far.",sep="")
+              print(titles)
+              returntable <- rbind(returntable,loopframe)
+              stopper <- 1
+              
+            }
+        }
+        stopper <- 1
+        
+      }
+      
+    output2 <- paste("Returntable has ",nrow(returntable),"rows.",sep="")
+    print(output2)
+    if(i == nrow(X)){
+      finalstop <- 1
+    }
+    }
+  }
+  returntable[,1] <- NULL
+  return(returntable)
+}
+combinedtable<- joinbytitle(merged_data,moviedump)
+
+setwd("Constructed Datasets")
+write.csv(combinedtable,"Combined Table2.csv",row.names=FALSE)
+setwd("..")
+```
+
+
+```{r}
+# setwd("Base Datasets")
+# list.files()
+# ratings <- read.csv("ratings.csv",header=TRUE)
+# colnames(ratings)
+# links <- read.csv("links.csv",header=TRUE)
+# movie_metadata <- read.csv("movie_metadata.csv",header=TRUE)
+# tags <- read.csv("tags.csv",header=TRUE)
+# movies <- read.csv("movies.csv",header=TRUE)
+# setwd("..")
+
+
+```
+
+Next, we need to modify the format of the imdbId column in our user rating data so that it matches the OMDB table's format (7-digit number preceded by "tt"). 
+
+```{r}
+
+```
+
+Now that we have a common key between the two, let's join the dataset. 
+
+```{r}
+OMDBdata2$imdbID <- as.character(OMDBdata2$imdbID)
+usr_rating_data$imdbID <- as.character(usr_rating_data$imdbID)
+merged_frame <- merge(OMDBdata2,usr_rating_data,by="imdbID",all.x = TRUE, all.y = TRUE)
+```
+
